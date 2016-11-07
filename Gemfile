@@ -5,6 +5,9 @@ source "https://rubygems.org"
 
 # Add dependencies to develop your gem here.
 # Include everything needed to run rake, tests, features, etc.
+gem 'faraday'
+gem 'faraday_middleware'
+
 group :development do
   gem "shoulda", ">= 0"
   gem "rdoc", "~> 3.12"
