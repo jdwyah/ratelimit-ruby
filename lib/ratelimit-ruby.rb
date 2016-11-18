@@ -3,16 +3,17 @@ module RateLimit
   end
 
   class Limiter
-    def base_url
-      true ? 'http://localhost:8080' : 'http://api.ratelim.it'
+    def base_url(local)
+      local ? 'http://localhost:8080' : 'http://www.ratelim.it'
     end
 
-    def initialize(apikey:, account_id:)
-      @conn = Faraday.new(:url => self.base_url) do |faraday|
+    def initialize(apikey:, account_id:, local: false)
+      @conn = Faraday.new(:url => self.base_url(local)) do |faraday|
         faraday.request :json # form-encode POST params
-        # faraday.response :logger # log requests to STDOUT
+        faraday.response :logger # log requests to STDOUT
         faraday.adapter Faraday.default_adapter # make requests with Net::HTTP
       end
+      puts "basic #{account_id} #{apikey}"
       @conn.basic_auth(account_id, apikey)
     end
 
@@ -35,6 +36,7 @@ module RateLimit
                                                   allowPartialResponse: allow_partial_response }.to_json
       puts result.body
       res =JSON.parse(result.body, object_class: OpenStruct)
+      res.amount ||= 0
       res
     end
 
