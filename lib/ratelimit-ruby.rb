@@ -7,13 +7,12 @@ module RateLimit
       local ? 'http://localhost:8080' : 'http://www.ratelim.it'
     end
 
-    def initialize(apikey:, account_id:, local: false)
+    def initialize(apikey:, account_id:, local: false, debug: false)
       @conn = Faraday.new(:url => self.base_url(local)) do |faraday|
         faraday.request :json # form-encode POST params
-        faraday.response :logger # log requests to STDOUT
+        faraday.response :logger if debug
         faraday.adapter Faraday.default_adapter # make requests with Net::HTTP
       end
-      puts "basic #{account_id} #{apikey}"
       @conn.basic_auth(account_id, apikey)
     end
 
@@ -34,7 +33,6 @@ module RateLimit
       result = @conn.post '/api/v1/limitcheck', { acquireAmount: acquire_amount,
                                                   groups: [group],
                                                   allowPartialResponse: allow_partial_response }.to_json
-      puts result.body
       res =JSON.parse(result.body, object_class: OpenStruct)
       res.amount ||= 0
       res
@@ -70,8 +68,6 @@ module RateLimit
                   policyName: limit_definition.policy,
                   returnable: limit_definition.returnable }.to_json
       result= @conn.post '/api/v1/limits', to_send
-
-      puts result.body
     end
   end
 
