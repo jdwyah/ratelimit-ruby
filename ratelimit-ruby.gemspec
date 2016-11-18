@@ -11,28 +11,30 @@ Gem::Specification.new do |s|
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.require_paths = ["lib"]
   s.authors = ["Jeff Dwyer"]
-  s.date = "2016-11-04"
+  s.date = "2016-11-18"
   s.description = "rate limit your ruby"
   s.email = "jdwyah@gmail.com"
   s.extra_rdoc_files = [
     "LICENSE.txt",
-    "README.rdoc"
+    "README.md"
   ]
   s.files = [
     ".document",
     ".ruby-gemset",
     ".ruby-version",
     "Gemfile",
+    "Gemfile.lock",
     "LICENSE.txt",
-    "README.rdoc",
+    "README.md",
     "Rakefile",
     "VERSION",
     "lib/ratelimit-ruby.rb",
-    "lib/ratelimit/limit_definition.rb"
+    "lib/ratelimit/limit_definition.rb",
+    "ratelimit-ruby.gemspec"
   ]
   s.homepage = "http://github.com/jdwyah/ratelimit-ruby"
   s.licenses = ["MIT"]
-  s.rubygems_version = "2.4.8"
+  s.rubygems_version = "2.5.1"
   s.summary = "rate limit your ruby"
 
   if s.respond_to? :specification_version then
@@ -40,6 +42,7 @@ Gem::Specification.new do |s|
 
     if Gem::Version.new(Gem::VERSION) >= Gem::Version.new('1.2.0') then
       s.add_runtime_dependency(%q<faraday>, [">= 0"])
+      s.add_runtime_dependency(%q<faraday_middleware>, [">= 0"])
       s.add_development_dependency(%q<shoulda>, [">= 0"])
       s.add_development_dependency(%q<rdoc>, ["~> 3.12"])
       s.add_development_dependency(%q<bundler>, ["~> 1.0"])
@@ -47,6 +50,7 @@ Gem::Specification.new do |s|
       s.add_development_dependency(%q<simplecov>, [">= 0"])
     else
       s.add_dependency(%q<faraday>, [">= 0"])
+      s.add_dependency(%q<faraday_middleware>, [">= 0"])
       s.add_dependency(%q<shoulda>, [">= 0"])
       s.add_dependency(%q<rdoc>, ["~> 3.12"])
       s.add_dependency(%q<bundler>, ["~> 1.0"])
@@ -55,6 +59,7 @@ Gem::Specification.new do |s|
     end
   else
     s.add_dependency(%q<faraday>, [">= 0"])
+    s.add_dependency(%q<faraday_middleware>, [">= 0"])
     s.add_dependency(%q<shoulda>, [">= 0"])
     s.add_dependency(%q<rdoc>, ["~> 3.12"])
     s.add_dependency(%q<bundler>, ["~> 1.0"])
