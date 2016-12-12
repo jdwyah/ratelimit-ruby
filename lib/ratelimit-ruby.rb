@@ -7,21 +7,33 @@ module RateLimit
       local ? 'http://localhost:8080' : 'http://www.ratelim.it'
     end
 
-    def initialize(apikey:, account_id:, local: false, debug: false)
+    def initialize(apikey:, local: false, debug: false)
       @conn = Faraday.new(:url => self.base_url(local)) do |faraday|
         faraday.request :json # form-encode POST params
         faraday.response :logger if debug
         faraday.adapter Faraday.default_adapter # make requests with Net::HTTP
       end
-      @conn.basic_auth(account_id, apikey)
+      (username, pass) = apikey.split("|")
+      @conn.basic_auth(username, pass)
     end
 
-    def upsert_semaphore(group, limit, policy)
-      upsert(LimitDefinition.new(group, limit, policy, true))
+
+    def create_concurrency_limit(group, concurrent, timeout_seconds)
+      upsert_concurrency_limit(group, concurrent, timeout_seconds, method: :post)
     end
 
-    def upsert_limit(group, limit, policy)
-      upsert(LimitDefinition.new(group, limit, policy, false))
+    def upsert_concurrency_limit(group, concurrent, timeout_seconds, method: :put)
+      recharge_rate = (24*60*60)/timeout_seconds
+      recharge_policy = DAILY_ROLLING
+      upsert(LimitDefinition.new(group, recharge_rate, recharge_policy, true, concurrent), method)
+    end
+
+    def create_limit(group, limit, policy, burst: nil)
+      upsert(LimitDefinition.new(group, limit, policy, false, burst || limit), :post)
+    end
+
+    def upsert_limit(group, limit, policy, burst: nil)
+      upsert(LimitDefinition.new(group, limit, policy, false, burst || limit), :put)
     end
 
     def check?(group)
@@ -47,7 +59,7 @@ module RateLimit
         if res.passed
           return res
         end
-        sleep += rand
+        sleep += rand/2
       end
       raise RateLimit::WaitExceeded
     end
@@ -57,17 +69,18 @@ module RateLimit
       @conn.post '/api/v1/limitreturn',
                  { enforcedGroup: limit_result.enforcedGroup,
                    amount: limit_result.amount }.to_json
-      puts result.body
+      puts "RETURN #{result.body} #{result.status}"
     end
 
     private
 
-    def upsert(limit_definition)
+    def upsert(limit_definition, method)
       to_send = { limit: limit_definition.limit,
                   group: limit_definition.group,
+                  burst: limit_definition.burst,
                   policyName: limit_definition.policy,
                   returnable: limit_definition.returnable }.to_json
-      result= @conn.post '/api/v1/limits', to_send
+      result= @conn.send(method, '/api/v1/limits', to_send)
     end
   end
 

@@ -11,14 +11,15 @@ module RateLimit
   POLICIES = [SECONDLY, MINUTELY, MINUTELY_ROLLING, HOURLY, HOURLY_ROLLING, DAILY, DAILY_ROLLING, MINUTELY, INFINITE]
 
   class LimitDefinition
-    attr_reader :limit, :group, :policy, :returnable
+    attr_reader :limit, :group, :policy, :returnable, :burst
 
-    def initialize(group, limit, policy, returnable)
+    def initialize(group, limit, policy, returnable, burst)
       raise "Invalid Policy" unless POLICIES.include? policy
       @limit = limit
       @group = group
       @policy = policy
-      @returnable= returnable
+      @returnable = returnable
+      @burst = burst
     end
   end
 end
