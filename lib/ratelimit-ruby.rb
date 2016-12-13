@@ -1,4 +1,6 @@
 module RateLimit
+  WAIT_INCR_MAX = 0.5
+
   class WaitExceeded < StandardError
   end
 
@@ -36,7 +38,7 @@ module RateLimit
       upsert(LimitDefinition.new(group, limit, policy, false, burst || limit), :put)
     end
 
-    def check?(group)
+    def pass?(group)
       result = acquire(group, 1)
       return result.passed
     end
@@ -59,7 +61,7 @@ module RateLimit
         if res.passed
           return res
         end
-        sleep += rand/2
+        sleep += rand * WAIT_INCR_MAX
       end
       raise RateLimit::WaitExceeded
     end

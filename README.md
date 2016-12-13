@@ -3,13 +3,13 @@
 Rate Limit your Ruby app using http://www.ratelim.it
 
 ```ruby
-limiter =  RateLimit::Limiter.new(apikey: "APIKEY", account_id: ACCT_ID)
+limiter =  RateLimit::Limiter.new(apikey: "ACCT_ID|APIKEY")
 
 # only need to do this on startup
 # limit to 1 per hour
-limiter.upsert_limit(Limit.new("pageload", 1, RateLimIt::HOURLY_ROLLING))
+limiter.upsert_limit("pageload", 1, RateLimIt::HOURLY_ROLLING)
 
-if limiter.check?("pageload")
+if limiter.pass?("pageload")
   do_hourly_thing()
 end
 ```
