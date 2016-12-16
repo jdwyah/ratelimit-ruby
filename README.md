@@ -15,6 +15,7 @@ end
 ```
 See full documentation http://www.ratelim.it/documentation
 
+
 ## Supports
 
 * RateLimits
@@ -23,6 +24,17 @@ See full documentation http://www.ratelim.it/documentation
 * Logging
 * Semaphores
 * Infinite retention fo deduplication workflows
+
+## Options and Defaults
+```ruby
+limiter =  RateLimit::Limiter.new(apikey: "ACCT_ID|APIKEY",
+  on_error: :log_and_pass, # :log_and_pass, :log_and_hit, :throw
+  logger: nil, # pass in your own logger here
+  debug: false  #Faraday debugging
+)
+
+
+```
 
 
 ## Contributing to ratelimit-ruby
@@ -37,6 +49,6 @@ See full documentation http://www.ratelim.it/documentation
 
 ## Copyright
 
-Copyright (c) 2016 Jeff Dwyer. See LICENSE.txt for
+Copyright (c) 2017 Jeff Dwyer. See LICENSE.txt for
 further details.
 
