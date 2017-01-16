@@ -27,20 +27,22 @@ module RateLimit
     end
 
 
-    def create_concurrency_limit(group, concurrent, timeout_seconds)
-      upsert_concurrency_limit(group, concurrent, timeout_seconds, method: :post)
+    def create_returnable_limit(group, total_tokens, seconds_to_refill_one_token)
+      upsert_returnable_limit(group, total_tokens, seconds_to_refill_one_token, method: :post)
     end
 
-    def upsert_concurrency_limit(group, concurrent, timeout_seconds, method: :put)
-      recharge_rate = (24*60*60)/timeout_seconds
+    def upsert_returnable_limit(group, total_tokens, seconds_to_refill_one_token, method: :put)
+      recharge_rate = (24*60*60)/seconds_to_refill_one_token
       recharge_policy = DAILY_ROLLING
-      upsert(LimitDefinition.new(group, recharge_rate, recharge_policy, true, concurrent), method)
+      upsert(LimitDefinition.new(group, recharge_rate, recharge_policy, true, total_tokens), method)
     end
 
+    # create only. does not overwrite if it already exists
     def create_limit(group, limit, policy, burst: nil)
       upsert(LimitDefinition.new(group, limit, policy, false, burst || limit), :post)
     end
 
+    # upsert. overwrite whatever is there
     def upsert_limit(group, limit, policy, burst: nil)
       upsert(LimitDefinition.new(group, limit, policy, false, burst || limit), :put)
     end
@@ -78,7 +80,7 @@ module RateLimit
 
 
     def return(limit_result)
-      @conn.post '/api/v1/limitreturn',
+      result = @conn.post '/api/v1/limitreturn',
                  { enforcedGroup: limit_result.enforcedGroup,
                    amount: limit_result.amount }.to_json
       handle_failure(result) unless result.success?
@@ -95,7 +97,13 @@ module RateLimit
                   policyName: limit_definition.policy,
                   returnable: limit_definition.returnable }.to_json
       result= @conn.send(method, '/api/v1/limits', to_send)
-      handle_failure(result) unless result.success?
+      if !result.success?
+        if method == :put
+          handle_failure(result)
+        elsif result.status != 409 # conflicts routinely expected on create
+          handle_failure(result)
+        end
+      end
     rescue => e
       handle_error(e)
     end
