@@ -60,7 +60,7 @@ module RateLimit
       handle_failure(result) unless result.success?
       res =JSON.parse(result.body, object_class: OpenStruct)
       res.amount ||= 0
-      @stats.increment("it.ratelim.limitcheck", tags: { policy_group: res.policyGroup, pass: res.passed })
+      @stats.increment("it.ratelim.limitcheck", tags: ["policy_group:#{res.policyGroup}", "pass:#{res.passed}"])
       res
     rescue => e
       handle_error(e)
