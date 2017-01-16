@@ -10,10 +10,11 @@ module RateLimit
       local ? 'http://localhost:8080' : 'http://www.ratelim.it'
     end
 
-    def initialize(apikey:, on_error: :log_and_pass, logger: nil, debug: false, local: false)
+    def initialize(apikey:, on_error: :log_and_pass, logger: nil, debug: false, local: false, stats: nil)
       @logger = (logger || Logger.new($stdout)).tap do |log|
         log.progname = "RateLimit"
       end
+      @stats = (stats || NoopStats.new)
       @on_error = on_error
       @conn = Faraday.new(:url => self.base_url(local)) do |faraday|
         faraday.request :json # form-encode POST params
@@ -59,6 +60,7 @@ module RateLimit
       handle_failure(result) unless result.success?
       res =JSON.parse(result.body, object_class: OpenStruct)
       res.amount ||= 0
+      @stats.increment("it.ratelim.limitcheck", tags: { policy_group: res.policyGroup, pass: res.passed })
       res
     rescue => e
       handle_error(e)
@@ -140,4 +142,5 @@ end
 require 'faraday'
 require 'faraday_middleware'
 require 'logger'
+require 'ratelimit/noop_stats'
 require 'ratelimit/limit_definition'
