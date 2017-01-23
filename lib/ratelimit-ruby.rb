@@ -83,11 +83,25 @@ module RateLimit
 
     def return(limit_result)
       result = @conn.post '/api/v1/limitreturn',
-                 { enforcedGroup: limit_result.enforcedGroup,
-                   amount: limit_result.amount }.to_json
+                          { enforcedGroup: limit_result.enforcedGroup,
+                            amount: limit_result.amount }.to_json
       handle_failure(result) unless result.success?
     rescue => e
       handle_error(e)
+    end
+
+    def feature_is_on?(feature)
+      feature_is_on_for?(feature, nil)
+    end
+
+    def feature_is_on_for?(feature, lookup_key, attributes: [])
+      to_send = { lookupKey: lookup_key, attributes: attributes }
+      result = @conn.get "/api/v1/featureflags/#{feature}/on", to_send
+      if result.success?
+        result.body == "true"
+      else
+        handle_feature_failure(result)
+      end
     end
 
     private
@@ -133,6 +147,20 @@ module RateLimit
         OpenStruct.new(passed: false)
       when :throw
         raise e
+      end
+    end
+
+
+    def handle_feature_failure(result)
+      case @on_error
+      when :log_and_pass
+        @logger.warn("returned #{result.status}")
+        true
+      when :log_and_hit
+        @logger.warn("returned #{result.status}")
+        false
+      when :throw
+        raise "#{result.status} calling feature flag RateLim.it"
       end
     end
   end
