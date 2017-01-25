@@ -7,18 +7,15 @@ module RateLimit
 
   class Limiter
 
-    def base_url(local)
-      local ? 'http://localhost:8080' : 'http://www.ratelim.it'
-    end
-
     def initialize(apikey:,
                    on_error: :log_and_pass,
                    logger: nil,
                    debug: false,
-                   local: false, # local development
                    stats: nil, # receives increment("it.ratelim.limitcheck", {:tags=>["policy_group:page_view", "pass:true"]})
                    shared_cache: nil, # Something that quacks like Rails.cache ideally memcached
-                   in_process_cache: nil # ideally ActiveSupport::Cache::MemoryStore.new(size: 2.megabytes)
+                   in_process_cache: nil, # ideally ActiveSupport::Cache::MemoryStore.new(size: 2.megabytes)
+                   use_expiry_cache: true, # must have shared_cache defined
+                   local: false # local development
     )
       @on_error = on_error
       @logger = (logger || Logger.new($stdout)).tap do |log|
@@ -27,6 +24,7 @@ module RateLimit
       @stats = (stats || NoopStats.new)
       @shared_cache = (shared_cache || NoopCache.new)
       @in_process_cache = (in_process_cache || NoopCache.new)
+      @use_expiry_cache = use_expiry_cache
       @conn = Faraday.new(:url => self.base_url(local)) do |faraday|
         faraday.request :json # form-encode POST params
         faraday.response :logger if debug
@@ -65,14 +63,29 @@ module RateLimit
     end
 
     def acquire(group, acquire_amount, allow_partial_response: false)
+
+      expiry_cache_key = "it.ratelim.expiry.#{group}"
+      if @use_expiry_cache
+        expiry = @shared_cache.read(expiry_cache_key)
+        if !expiry.nil? && Integer(expiry) > Time.now.utc.to_f * 1000
+          @stats.increment("it.ratelim.limitcheck.expirycache.hit", tags: [])
+          return OpenStruct.new(passed: false, amount: 0)
+        end
+      end
+
       result = @conn.post '/api/v1/limitcheck', { acquireAmount: acquire_amount,
                                                   groups: [group],
                                                   allowPartialResponse: allow_partial_response }.to_json
       handle_failure(result) unless result.success?
       res =JSON.parse(result.body, object_class: OpenStruct)
       res.amount ||= 0
+
       @stats.increment("it.ratelim.limitcheck", tags: ["policy_group:#{res.policyGroup}", "pass:#{res.passed}"])
-      res
+      if @use_expiry_cache
+        reset = result.headers['X-Rate-Limit-Reset']
+        @shared_cache.write(expiry_cache_key, reset) unless reset.nil?
+      end
+      return res
     rescue => e
       handle_error(e)
     end
@@ -109,25 +122,31 @@ module RateLimit
 
       cache_key = "it.ratelim.ff.#{feature}.#{lookup_key}.#{attributes}"
       @in_process_cache.fetch(cache_key, expires_in: 60) do
-        return uncached_feature_is_on_for?(feature, lookup_key, attributes) if @shared_cache.class == NoopCache
+        next uncached_feature_is_on_for?(feature, lookup_key, attributes) if @shared_cache.class == NoopCache
 
         feature_obj = get_feature(feature)
         if feature_obj.nil?
-          return false
+          next false
         end
 
         attributes << lookup_key if lookup_key
         if (attributes & feature_obj.whitelisted).size > 0
-          return true
+          next true
         end
 
         if lookup_key
-          return get_user_pct(feature, lookup_key) < feature_obj.pct
+          next get_user_pct(feature, lookup_key) < feature_obj.pct
         end
 
-        return feature_obj.pct > 0.999
+        next feature_obj.pct > 0.999
       end
     end
+
+    def base_url(local)
+      local ? 'http://localhost:8080' : 'http://www.ratelim.it'
+    end
+
+    private
 
     def uncached_feature_is_on_for?(feature, lookup_key, attributes)
       to_send = {}
@@ -165,8 +184,6 @@ module RateLimit
       int_value / 4294967294.0
     end
 
-    private
-
     def upsert(limit_definition, method)
       to_send = { limit: limit_definition.limit,
                   group: limit_definition.group,
@@ -189,10 +206,10 @@ module RateLimit
       case @on_error
       when :log_and_pass
         @logger.warn("returned #{result.status}")
-        OpenStruct.new(passed: true)
+        OpenStruct.new(passed: true, amount: 0)
       when :log_and_hit
         @logger.warn("returned #{result.status}")
-        OpenStruct.new(passed: false)
+        OpenStruct.new(passed: false, amount: 0)
       when :throw
         raise "#{result.status} calling RateLim.it"
       end
@@ -202,10 +219,10 @@ module RateLimit
       case @on_error
       when :log_and_pass
         @logger.warn(e)
-        OpenStruct.new(passed: true)
+        OpenStruct.new(passed: true, amount: 0)
       when :log_and_hit
         @logger.warn(e)
-        OpenStruct.new(passed: false)
+        OpenStruct.new(passed: false, amount: 0)
       when :throw
         raise e
       end
@@ -224,6 +241,7 @@ module RateLimit
         raise "#{result.status} calling feature flag RateLim.it"
       end
     end
+
   end
 
 end
