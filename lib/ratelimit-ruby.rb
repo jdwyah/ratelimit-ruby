@@ -6,16 +6,27 @@ module RateLimit
   end
 
   class Limiter
+
     def base_url(local)
       local ? 'http://localhost:8080' : 'http://www.ratelim.it'
     end
 
-    def initialize(apikey:, on_error: :log_and_pass, logger: nil, debug: false, local: false, stats: nil)
+    def initialize(apikey:,
+                   on_error: :log_and_pass,
+                   logger: nil,
+                   debug: false,
+                   local: false, # local development
+                   stats: nil, # receives increment("it.ratelim.limitcheck", {:tags=>["policy_group:page_view", "pass:true"]})
+                   shared_cache: nil, # Something that quacks like Rails.cache ideally memcached
+                   in_process_cache: nil # ideally ActiveSupport::Cache::MemoryStore.new(size: 2.megabytes)
+    )
+      @on_error = on_error
       @logger = (logger || Logger.new($stdout)).tap do |log|
         log.progname = "RateLimit"
       end
       @stats = (stats || NoopStats.new)
-      @on_error = on_error
+      @shared_cache = (shared_cache || NoopCache.new)
+      @in_process_cache = (in_process_cache || NoopCache.new)
       @conn = Faraday.new(:url => self.base_url(local)) do |faraday|
         faraday.request :json # form-encode POST params
         faraday.response :logger if debug
@@ -23,8 +34,8 @@ module RateLimit
         faraday.options[:timeout] = 5
         faraday.adapter Faraday.default_adapter # make requests with Net::HTTP
       end
-      (username, pass) = apikey.split("|")
-      @conn.basic_auth(username, pass)
+      (@account_id, pass) = apikey.split("|")
+      @conn.basic_auth(@account_id, pass)
     end
 
 
@@ -80,7 +91,6 @@ module RateLimit
       raise RateLimit::WaitExceeded
     end
 
-
     def return(limit_result)
       result = @conn.post '/api/v1/limitreturn',
                           { enforcedGroup: limit_result.enforcedGroup,
@@ -95,13 +105,64 @@ module RateLimit
     end
 
     def feature_is_on_for?(feature, lookup_key, attributes: [])
-      to_send = { lookupKey: lookup_key, attributes: attributes }
+      @stats.increment("it.ratelim.featureflag.on", tags: ["feature:#{feature}"])
+
+      cache_key = "it.ratelim.ff.#{feature}.#{lookup_key}.#{attributes}"
+      @in_process_cache.fetch(cache_key, expires_in: 60) do
+        return uncached_feature_is_on_for?(feature, lookup_key, attributes) if @shared_cache.class == NoopCache
+
+        feature_obj = get_feature(feature)
+        if feature_obj.nil?
+          return false
+        end
+
+        attributes << lookup_key if lookup_key
+        if (attributes & feature_obj.whitelisted).size > 0
+          return true
+        end
+
+        if lookup_key
+          return get_user_pct(feature, lookup_key) < feature_obj.pct
+        end
+
+        return feature_obj.pct > 0.999
+      end
+    end
+
+    def uncached_feature_is_on_for?(feature, lookup_key, attributes)
+      to_send = {}
+      to_send[:lookupKey] = lookup_key unless lookup_key.nil?
+      to_send[:attributes] = attributes if attributes.any?
       result = @conn.get "/api/v1/featureflags/#{feature}/on", to_send
+      @stats.increment("it.ratelim.featureflag.on.req", tags: ["success:#{result.success?}"])
       if result.success?
         result.body == "true"
       else
         handle_feature_failure(result)
       end
+    end
+
+    def get_feature(feature)
+      get_all_features[feature]
+    end
+
+    def get_all_features
+      @shared_cache.fetch("it.ratelim.get_all_features", expires_in: 60) do
+        result = @conn.get "/api/v1/featureflags"
+        @stats.increment("it.ratelim.featureflag.getall.req", tags: ["success:#{result.success?}"])
+        if result.success?
+          res =JSON.parse(result.body, object_class: OpenStruct)
+          Hash[res.map { |r| [r.feature, r] }]
+        else
+          @logger.error("failed to fetch feature flags #{result.status}")
+          {}
+        end
+      end
+    end
+
+    def get_user_pct(feature, lookup_key)
+      int_value = Murmur3.murmur3_32("#{@account_id}#{feature}#{lookup_key}")
+      int_value / 4294967294.0
     end
 
     private
@@ -171,4 +232,6 @@ require 'faraday'
 require 'faraday_middleware'
 require 'logger'
 require 'ratelimit/noop_stats'
+require 'ratelimit/noop_cache'
+require 'ratelimit/murmur3'
 require 'ratelimit/limit_definition'

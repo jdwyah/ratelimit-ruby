@@ -18,24 +18,56 @@ See full documentation http://www.ratelim.it/documentation
 
 ## Supports
 
-* RateLimits
+* [RateLimits](http://www.ratelim.it/documentation/basic_rate_limits)
 * Millions of individual limits sharing the same policies
-* WebUI for tweaking limits
-* Logging
-* Semaphores
-* Infinite retention fo deduplication workflows
+* WebUI for tweaking limits & feature flags
+* Logging to help you debug
+* [Concurrency](http://www.ratelim.it/documentation/concurrency) & Semaphores
+* Infinite retention for [deduplication workflows](http://www.ratelim.it/documentation/once_and_only_once)
+* [FeatureFlags](http://www.ratelim.it/documentation/feature_flags) as a Service
 
 ## Options and Defaults
 ```ruby
-limiter =  RateLimit::Limiter.new(apikey: "ACCT_ID|APIKEY",
+limiter =  RateLimit::Limiter.new(
+  apikey: "ACCT_ID|APIKEY",
   on_error: :log_and_pass, # :log_and_pass, :log_and_hit, :throw
-  logger: nil, # pass in your own logger here
-  debug: false  #Faraday debugging
+  logger: nil, # pass in your own logger here. ie Rails.logger
+  debug: false,  #Faraday debugging
+  stats: nil, # receives increment("it.ratelim.limitcheck", {:tags=>["policy_group:page_view", "pass:true"]})
+  shared_cache: nil, # Something that quacks like Rails.cache ideally memcached
+                     # used to avoid hitting feature flag endpoint too much
+  in_process_cache: nil # Something like ActiveSupport::Cache::MemoryStore.new(size: 2.megabytes)
+                        # used to memoize featureflags if used in tight loops
 )
+```
+
+## Full Example with Feature Flags
+```ruby
+@limiter = RateLimit::Limiter.new(apikey: "",
+    shared_cache = Rails.cache,
+    logger = Rails.logger,
+    in_process_cahe = ActiveSupport::Cache::MemoryStore.new(size: 1.megabytes)
+)
+
+@limiter.create_limit("event:pageload", 1, RateLimIt::HOURLY_ROLLING)
+@limiter.create_limit("event:activation", 1, RateLimIt::INFINITE)
+
+
+def track_event(event, user_id)
+  if @limiter.feature_is_on_for?("Services::RateLimit", user_id)       
+    return unless @limiter.pass?("event:#{event}:#{user_id}") 
+  end
+  actually_track_event(event, user_id)
+end
+
+
+track_event("pageload:home_page", 1) # will track
+track_event("pageload:home_page", 1) # will skip for the next hour
+track_event("activation", 1) # will track
+track_event("activation", 1) # will skip forever
 
 
 ```
-
 
 ## Contributing to ratelimit-ruby
  
