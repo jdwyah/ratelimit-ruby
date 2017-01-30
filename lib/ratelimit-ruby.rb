@@ -83,7 +83,7 @@ module RateLimit
 
     def acquire(group, acquire_amount, allow_partial_response: false)
 
-      expiry_cache_key = "it.ratelim.expiry.#{group}"
+      expiry_cache_key = "it.ratelim.expiry:#{group}"
       if @use_expiry_cache
         expiry = @shared_cache.read(expiry_cache_key)
         if !expiry.nil? && Integer(expiry) > Time.now.utc.to_f * 1000
@@ -140,7 +140,7 @@ module RateLimit
     def feature_is_on_for?(feature, lookup_key, attributes: [])
       @stats.increment("it.ratelim.featureflag.on", tags: ["feature:#{feature}"])
 
-      cache_key = "it.ratelim.ff.#{feature}.#{lookup_key}.#{attributes}"
+      cache_key = "it.ratelim.ff:#{feature}.#{lookup_key}.#{attributes}"
       @in_process_cache.fetch(cache_key, expires_in: 60) do
         next uncached_feature_is_on_for?(feature, lookup_key, attributes) if @shared_cache.class == NoopCache
 
@@ -186,7 +186,7 @@ module RateLimit
     end
 
     def get_all_features
-      @shared_cache.fetch("it.ratelim.get_all_features", expires_in: 60) do
+      @shared_cache.fetch("it.ratelim:get_all_features", expires_in: 60) do
         result = @conn.get "/api/v1/featureflags"
         @stats.increment("it.ratelim.featureflag.getall.req", tags: ["success:#{result.success?}"])
         if result.success?
