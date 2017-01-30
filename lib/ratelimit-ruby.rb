@@ -57,6 +57,25 @@ module RateLimit
       upsert(LimitDefinition.new(group, limit, policy, false, burst || limit), :put)
     end
 
+    def upsert(limit_definition, method)
+      to_send = { limit: limit_definition.limit,
+                  group: limit_definition.group,
+                  burst: limit_definition.burst,
+                  policyName: limit_definition.policy,
+                  safetyLevel: limit_definition.safety_level,
+                  returnable: limit_definition.returnable }.to_json
+      result= @conn.send(method, '/api/v1/limits', to_send)
+      if !result.success?
+        if method == :put
+          handle_failure(result)
+        elsif result.status != 409 # conflicts routinely expected on create
+          handle_failure(result)
+        end
+      end
+    rescue => e
+      handle_error(e)
+    end
+
     def pass?(group)
       result = acquire(group, 1)
       return result.passed
@@ -107,6 +126,7 @@ module RateLimit
     def return(limit_result)
       result = @conn.post '/api/v1/limitreturn',
                           { enforcedGroup: limit_result.enforcedGroup,
+                            expiresAt: limit_result.expiresAt,
                             amount: limit_result.amount }.to_json
       handle_failure(result) unless result.success?
     rescue => e
@@ -182,24 +202,6 @@ module RateLimit
     def get_user_pct(feature, lookup_key)
       int_value = Murmur3.murmur3_32("#{@account_id}#{feature}#{lookup_key}")
       int_value / 4294967294.0
-    end
-
-    def upsert(limit_definition, method)
-      to_send = { limit: limit_definition.limit,
-                  group: limit_definition.group,
-                  burst: limit_definition.burst,
-                  policyName: limit_definition.policy,
-                  returnable: limit_definition.returnable }.to_json
-      result= @conn.send(method, '/api/v1/limits', to_send)
-      if !result.success?
-        if method == :put
-          handle_failure(result)
-        elsif result.status != 409 # conflicts routinely expected on create
-          handle_failure(result)
-        end
-      end
-    rescue => e
-      handle_error(e)
     end
 
     def handle_failure(result)
