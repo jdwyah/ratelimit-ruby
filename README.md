@@ -44,9 +44,9 @@ limiter =  RateLimit::Limiter.new(
 ## Full Example with Feature Flags
 ```ruby
 @limiter = RateLimit::Limiter.new(apikey: "",
-    shared_cache = Rails.cache,
-    logger = Rails.logger,
-    in_process_cahe = ActiveSupport::Cache::MemoryStore.new(size: 1.megabytes)
+    shared_cache: Rails.cache,
+    logger: Rails.logger,
+    in_process_cache: ActiveSupport::Cache::MemoryStore.new(size: 1.megabytes)
 )
 
 @limiter.create_limit("event:pageload", 1, RateLimIt::HOURLY_ROLLING)
