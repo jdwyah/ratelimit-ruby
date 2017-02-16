@@ -27,6 +27,7 @@ module RateLimit
       @use_expiry_cache = use_expiry_cache
       @conn = Faraday.new(:url => self.base_url(local)) do |faraday|
         faraday.request :json # form-encode POST params
+        faraday.headers["accept"] = "application/json"
         faraday.response :logger if debug
         faraday.options[:open_timeout] = 2
         faraday.options[:timeout] = 5
