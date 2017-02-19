@@ -159,7 +159,7 @@ module RateLimit
           next get_user_pct(feature, lookup_key) < feature_obj.pct
         end
 
-        next feature_obj.pct > 0.999
+        next feature_obj.pct > rand()
       end
     end
 
