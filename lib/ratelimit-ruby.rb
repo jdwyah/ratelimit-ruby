@@ -206,6 +206,7 @@ module RateLimit
     end
 
     def handle_failure(result)
+      @stats.increment("it.ratelim.failure", tags: ["type:limit"])
       case @on_error
       when :log_and_pass
         @logger.warn("returned #{result.status}")
@@ -219,6 +220,7 @@ module RateLimit
     end
 
     def handle_error(e)
+      @stats.increment("it.ratelim.error", tags: ["type:limit"])
       case @on_error
       when :log_and_pass
         @logger.warn(e)
@@ -233,6 +235,7 @@ module RateLimit
 
 
     def handle_feature_failure(result)
+      @stats.increment("it.ratelim.failure", tags: ["type:featureflag"])
       case @on_error
       when :log_and_pass
         @logger.warn("returned #{result.status}")
