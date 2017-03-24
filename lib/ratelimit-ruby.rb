@@ -19,7 +19,7 @@ module RateLimit
     )
       @on_error = on_error
       @logger = (logger || Logger.new($stdout)).tap do |log|
-        log.progname = "RateLimit"
+        log.progname = "RateLimit" if log.respond_to? :progname=
       end
       @stats = (stats || NoopStats.new)
       @shared_cache = (shared_cache || NoopCache.new)
